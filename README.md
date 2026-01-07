@@ -59,13 +59,6 @@ http://localhost:8010
 * **Downloadable Files:**
 
   * JSON: Structured analysis data
-  * CSV: Tabular format
+  * Excel: Tabular format
   * ZIP: All result files
   * Log: Processing messages
-
----
-
-## ⚠️ Notes
-
-* Ensure backend routes for `/download_json/<timestamp>`, `/download_csv/<timestamp>`, `/download_zip/<timestamp>`, and `/download_log/<timestamp>` are implemented.
-* Analysis may take a few seconds to minutes depending on the number of nucleotide sequence files.
