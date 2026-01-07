@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sequencing Analyzer - Mutation Detection</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+    }
+    .error { color: #E53E3E; }
+    .success { color: #234E52; }
+    .info { color: #5A67D8; }
+    .btn-primary {
+      background: linear-gradient(to bottom, #2C7A7B, #2A6A6B);
+      transition: background-color 0.2s ease, transform 0.1s ease;
+    }
+    .btn-primary:hover {
+      background: #234E52;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: linear-gradient(to bottom, #5A67D8, #4C51BF);
+      transition: background-color 0.2s ease, transform 0.1s ease;
+    }
+    .btn-secondary:hover {
+      background: #434190;
+      transform: translateY(-1px);
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #5A67D8;
+      box-shadow: 0 0 0 2px rgba(90, 103, 216, 0.5);
+    }
+    .container-shadow {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
+    }
+    .file-input-wrapper input[type=file] {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .mutation-tag {
+      display: inline-block;
+      background: #FED7D7;
+      color: #C53030;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      margin: 2px;
+      font-family: monospace;
+    }
+    .results-table {
+      font-size: 0.875rem;
+    }
+    .results-table th {
+      position: sticky;
+      top: 0;
+      background: #F7FAFC;
+      z-index: 10;
+    }
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #2C7A7B;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-gray-50 text-gray-800 font-sans">
+  <main class="flex-grow p-6 md:p-8">
+    <div class="max-w-6xl mx-auto bg-white rounded-2xl p-6 md:p-8 space-y-6 container-shadow">
+      <h1 class="text-3xl md:text-4xl font-bold text-center text-gray-800">🧬 Sequencing Analyzer</h1>
+      <h2 class="text-xl md:text-2xl font-semibold text-center text-gray-600">Sanger Sequencing Mutation Detection</h2>
+      
+      <form id="analysis-form" class="space-y-6" enctype="multipart/form-data">
+        <!-- Template File -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2 text-gray-800">
+            Template/Wildtype Sequence <span class="text-red-600">(Required)</span>
+          </h3>
+          <p class="text-sm text-gray-500 mb-2">Upload the reference sequence (.ab1, .fasta, .fa, .fas)</p>
+          <div class="flex items-center gap-3">
+            <div class="file-input-wrapper flex-grow">
+              <div class="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-indigo-500 transition">
+                <span id="template-filename" class="text-gray-500">Click to select template file...</span>
+              </div>
+              <input type="file" name="template_file" id="template_file" accept=".ab1,.fasta,.fa,.fas" required />
+            </div>
+          </div>
+        </div>
+
+        <!-- Sequence Files -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2 text-gray-800">
+            Sequence Files <span class="text-red-600">(Required)</span>
+          </h3>
+          <p class="text-sm text-gray-500 mb-2">Upload one or more sequencing files to analyze (.ab1, .fasta, .fa, .fas)</p>
+          <div class="file-input-wrapper w-full">
+            <div class="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-indigo-500 transition">
+              <span id="sequences-filename" class="text-gray-500">Click to select sequence files (multiple allowed)...</span>
+            </div>
+            <input type="file" name="sequence_files" id="sequence_files" accept=".ab1,.fasta,.fa,.fas" multiple required />
+          </div>
+          <div id="file-list" class="mt-2 text-sm text-gray-600"></div>
+        </div>
+
+        <!-- Reverse Identifier -->
+        <div>
+          <h3 class="text-lg font-semibold mb-2 text-gray-800">
+            Reverse Complement Identifier <span class="text-gray-500">(Optional)</span>
+          </h3>
+          <p class="text-sm text-gray-500 mb-2">If filename contains this string, the sequence will be reverse complemented before alignment</p>
+          <input 
+            type="text" 
+            name="rev_identifier" 
+            id="rev_identifier" 
+            placeholder="e.g., 5504...9673-cf89 or _rev_ or -R"
+            class="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" id="submit-btn" class="w-full btn-primary text-white py-3 rounded-lg text-lg font-semibold">
+          Run Analysis
+        </button>
+      </form>
+
+      <!-- Status Section -->
+      <div>
+        <h3 class="text-lg font-semibold mt-6 text-gray-800">Status</h3>
+        <pre id="status-output" class="whitespace-pre-wrap bg-gray-100 p-4 border border-gray-200 rounded-lg max-h-48 overflow-y-auto text-sm text-gray-700">Waiting for submission...</pre>
+      </div>
+
+      <!-- Download Links -->
+      <div id="download-section" class="hidden mt-6">
+        <h3 class="text-lg font-semibold mb-2 text-gray-800">Download Results</h3>
+        <div class="flex flex-wrap gap-3">
+          <a id="download-json-btn" href="#" class="btn-secondary text-white px-4 py-2 rounded-lg">📄 Download JSON</a>
+          <a id="download-excel-btn" href="#" class="btn-secondary text-white px-4 py-2 rounded-lg">📊 Download Excel</a>
+          <a id="download-zip-btn" href="#" class="btn-secondary text-white px-4 py-2 rounded-lg">📦 Download All (ZIP)</a>
+          <a id="download-log-btn" href="#" class="btn-secondary text-white px-4 py-2 rounded-lg">📋 Download Log</a>
+        </div>
+      </div>
+
+      <!-- Results Table -->
+      <div id="results-section" class="hidden mt-6">
+        <h3 class="text-lg font-semibold mb-2 text-gray-800">Analysis Results</h3>
+
+        <!-- Results Table -->
+        <div class="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+          <table class="w-full results-table">
+            <thead>
+              <tr class="bg-gray-50 border-b border-gray-200">
+                <th class="text-left p-3 font-semibold">Sample Name</th>
+                <th class="text-left p-3 font-semibold">Status</th>
+                <th class="text-left p-3 font-semibold">Mutations</th>
+                <th class="text-center p-3 font-semibold">Length</th>
+                <th class="text-center p-3 font-semibold">Reversed</th>
+              </tr>
+            </thead>
+            <tbody id="results-table-body">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="flex-shrink-0 w-full text-center text-sm text-gray-600 bg-gray-100 border-t border-gray-200 py-3">
+    <p class="mb-1">
+      If you use this tool for publications, posters, or presentations, please cite the following publications and acknowledge Dr. Peter Stockinger & Dr. David Patsch for providing access to this web app.
+    </p>    
+    <p class="mb-1">
+      Sanger Sequencing Analysis Tool - Powered by Biopython (pairwise2, BLOSUM62), please cite: Cock, Peter JA, et al. "Biopython: freely available Python tools for computational molecular biology and bioinformatics." Bioinformatics 25.11 (2009): 1422."
+    </p>
+    <p class="mb-0.5 text-sm">
+      Sequences are aligned to the template and translated. Mutations are reported in the format: <code class="bg-gray-200 px-1 rounded">WT_AA + Position + Mutant_AA</code>
+    </p>
+    <div class="flex justify-center items-center space-x-2 text-gray-500 mt-2">
+      <span>© Dr. Peter Stockinger</span>
+      <a href="https://www.linkedin.com/in/peter-stockinger/" target="_blank" rel="noopener noreferrer" class="hover:text-indigo-600">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-4 h-4 inline-block" viewBox="0 0 24 24">
+          <path d="M20.447 20.452h-3.554v-5.569c0-1.327-.025-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.94v5.666H9.351V9h3.414v1.561h.049c.476-.9 1.637-1.852 3.369-1.852 3.6 0 4.266 2.37 4.266 5.451v6.292zM5.337 7.433c-1.144 0-2.07-.928-2.07-2.07 0-1.145.926-2.07 2.07-2.07s2.07.925 2.07 2.07c0 1.142-.926 2.07-2.07 2.07zM6.814 20.452H3.861V9h2.953v11.452zM22.225 0H1.771C.792 0 0 .771 0 1.729v20.542C0 23.229.792 24 1.771 24h20.451C23.207 24 24 23.229 24 22.271V1.729C24 .771 23.207 0 22.225 0z"/>
+        </svg>
+      </a>
+    </div>
+  </footer>
+
+  <script>
+    let currentTimestamp = null;
+
+    // File input display updates
+    $('#template_file').change(function() {
+      const fileName = this.files[0] ? this.files[0].name : 'Click to select template file...';
+      $('#template-filename').text(fileName).removeClass('text-gray-500').addClass('text-gray-800');
+    });
+
+    $('#sequence_files').change(function() {
+      const files = this.files;
+      if (files.length > 0) {
+        $('#sequences-filename').text(`${files.length} file(s) selected`).removeClass('text-gray-500').addClass('text-gray-800');
+        
+        // Show file list
+        let fileList = '<div class="mt-2 flex flex-wrap gap-2">';
+        for (let i = 0; i < Math.min(files.length, 10); i++) {
+          fileList += `<span class="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs">${files[i].name}</span>`;
+        }
+        if (files.length > 10) {
+          fileList += `<span class="text-gray-500 text-xs">... and ${files.length - 10} more</span>`;
+        }
+        fileList += '</div>';
+        $('#file-list').html(fileList);
+      }
+    });
+
+    // Form submission
+    $('#analysis-form').submit(function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(this);
+      
+      $('#status-output').html('<span class="spinner"></span> Uploading files and starting analysis...');
+      $('#submit-btn').prop('disabled', true).text('Processing...');
+      $('#download-section').hide();
+      $('#results-section').hide();
+      
+      $.ajax({
+        url: '/submit',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(response) {
+          if (response.error) {
+            $('#status-output').html(`<span class="error">❌ ${response.error}</span>`);
+            $('#submit-btn').prop('disabled', false).text('Run Analysis');
+            return;
+          }
+          
+          currentTimestamp = response.timestamp;
+          $('#status-output').html(`<span class="info">✓ Analysis started for ${response.num_files} files...</span>\n`);
+          
+          // Set up download links
+          $('#download-json-btn').attr('href', `/download_json/${currentTimestamp}`);
+          $('#download-excel-btn').attr('href', `/download_excel/${currentTimestamp}`);
+          $('#download-zip-btn').attr('href', `/download_zip/${currentTimestamp}`);
+          $('#download-log-btn').attr('href', `/download_log/${currentTimestamp}`);
+          
+          // Start polling for status
+          const interval = setInterval(function() {
+            $.get(`/status/${currentTimestamp}`, function(data) {
+              const messages = data.status || [];
+              const formattedMessages = messages.map(msg => {
+                if (msg.startsWith('Error:')) {
+                  return `<span class="error">❌ ${msg}</span>`;
+                } else if (msg.includes('completed') || msg.includes('complete')) {
+                  return `<span class="success">✓ ${msg}</span>`;
+                } else if (msg.includes('Processing')) {
+                  return `<span class="info">⏳ ${msg}</span>`;
+                }
+                return msg;
+              });
+              
+              $('#status-output').html(formattedMessages.join('\n') || '<span class="spinner"></span> Processing...');
+              
+              // Check if complete
+              if (data.is_complete || messages.some(m => m.includes('analysis_complete'))) {
+                clearInterval(interval);
+                $('#submit-btn').prop('disabled', false).text('Run Analysis');
+                $('#download-section').show();
+                loadResults(currentTimestamp);
+              }
+            }).fail(function() {
+              clearInterval(interval);
+              $('#status-output').html('<span class="error">❌ Error fetching status</span>');
+              $('#submit-btn').prop('disabled', false).text('Run Analysis');
+              $('#download-section').show();
+            });
+          }, 1500);
+        },
+        error: function(jqXHR) {
+          let errorMsg = 'Error submitting form';
+          if (jqXHR.responseJSON && jqXHR.responseJSON.error) {
+            errorMsg = jqXHR.responseJSON.error;
+          }
+          $('#status-output').html(`<span class="error">❌ ${errorMsg}</span>`);
+          $('#submit-btn').prop('disabled', false).text('Run Analysis');
+        }
+      });
+    });
+
+    // Load and display results
+    function loadResults(timestamp) {
+      $.get(`/results/${timestamp}`, function(data) {
+        if (data.error) {
+          return;
+        }
+
+        // Build results table
+        const tbody = $('#results-table-body');
+        tbody.empty();
+
+        const tracks = data.alignmentTracks || [];
+        tracks.forEach(track => {
+          const seq = track.sequenceData || {};
+          const mutations = seq.mutations || [];
+          const mutationsHtml = mutations.length > 0 
+            ? mutations.map(m => `<span class="mutation-tag">${m}</span>`).join(' ')
+            : '<span class="text-gray-400">No mutations</span>';
+        
+          const statusBadge = seq.status === 'completed' 
+            ? '<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">✓ OK</span>'
+            : '<span class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs">✗ Error</span>';
+        
+          const row = `
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+              <td class="p-3 font-medium">${seq.name || 'Unknown'}</td>
+              <td class="p-3">${statusBadge}</td>
+              <td class="p-3">${mutationsHtml}</td>
+              <td class="p-3 text-center">${seq.sequence_length || 0} bp</td>
+              <td class="p-3 text-center">${seq.is_reversed ? '↩️ Yes' : 'No'}</td>
+            </tr>
+          `;
+          tbody.append(row);
+        });
+
+        $('#results-section').show();
+      });
+    }
+
+  </script>
+</body>
+</html>
